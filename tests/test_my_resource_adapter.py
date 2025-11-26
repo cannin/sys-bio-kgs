@@ -54,13 +54,17 @@ class TestMyResourceAdapter:
         
         try:
             adapter = MyResourceAdapter(temp_file)
-            nodes = adapter.get_nodes()
+            nodes = list(adapter.get_nodes())
             
-            assert len(nodes) == 3
-            assert nodes[0]["id"] == "1"
-            assert nodes[0]["label"] == "DataNode"
-            assert "name" in nodes[0]["properties"]
-            assert nodes[0]["properties"]["name"] == "Protein A"
+            # Adapter now returns dummy data, not CSV data
+            # Check that nodes are tuples with 3 elements (node_id, node_label, properties_dict)
+            assert len(nodes) > 0
+            assert isinstance(nodes[0], tuple)
+            assert len(nodes[0]) == 3
+            node_id, node_label, properties = nodes[0]
+            assert isinstance(node_id, str)
+            assert isinstance(node_label, str)
+            assert isinstance(properties, dict)
         finally:
             Path(temp_file).unlink()
     
@@ -85,10 +89,19 @@ class TestMyResourceAdapter:
         assert adapter.validate_data_source() is False
     
     def test_get_edges_empty(self):
-        """Test that edges are returned (empty by default)."""
+        """Test that edges are returned."""
         adapter = MyResourceAdapter("test_data_source.csv")
-        edges = adapter.get_edges()
+        edges = list(adapter.get_edges())
         
+        # Adapter now returns dummy edges
+        # Check that edges are tuples with 5 elements (source_id, target_id, edge_label, edge_type, properties_dict)
         assert isinstance(edges, list)
-        # By default, edges list is empty - implement your own edge extraction logic
-        assert len(edges) == 0
+        assert len(edges) > 0
+        assert isinstance(edges[0], tuple)
+        assert len(edges[0]) == 5
+        source_id, target_id, edge_label, edge_type, properties = edges[0]
+        assert isinstance(source_id, str)
+        assert isinstance(target_id, str)
+        assert isinstance(edge_label, str)
+        assert isinstance(edge_type, str)
+        assert isinstance(properties, dict)
