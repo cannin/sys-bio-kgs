@@ -18,6 +18,7 @@ dependencies = [
     "requests>=2.32.0",
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
+    "momapy",
 ]
 [dependency-groups]
 dev = [
