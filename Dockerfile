@@ -7,15 +7,20 @@ WORKDIR /app
 
 # Set working directory
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    g++ \
+    clang \
+    pkg-config \
+    ninja-build \
     git \
     curl \
-    gcc \
-    pkg-config \
     libcairo2-dev \
     libglib2.0-dev \
-    libffi-dev \
     libgirepository1.0-dev \
     gobject-introspection \
+    libpango1.0-dev \
+    libffi-dev \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
