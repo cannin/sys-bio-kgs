@@ -8,8 +8,8 @@ biocypher:
   offline: true
   strict_mode: false
   head_ontology:
-    url: https://github.com/biolink/biolink-model/raw/v3.2.1/biolink-model.owl.ttl
-    root_node: entity
+    url: https://raw.githubusercontent.com/EBI-BioModels/SBO/refs/heads/master/SBO_OWL.owl
+    root_node: systems biology representation
     switch_label_and_id: true
 
   #---- OPTIONAL PARAMETERS
@@ -19,7 +19,7 @@ biocypher:
 
   log_directory: biocypher-log
 
-  output_directory: biocypher-out
+  # output_directory: biocypher-out
 
   cache_directory: .cache
 
