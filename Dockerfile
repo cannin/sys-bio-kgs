@@ -5,7 +5,16 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Set working directory
+# Install system dependencies
+# Note: momapy is optional and requires additional system libraries (cairo, pango, gobject-introspection)
+# If you want to use momapy, uncomment the following lines and install momapy with:
+#   pip install -e ".[momapy]"
+# RUN apt-get update && apt-get install -y \
+#     libcairo2-dev \
+#     libpango1.0-dev \
+#     libgirepository1.0-dev \
+#     gir1.2-pango-1.0 \
+#     && rm -rf /var/lib/apt/lists/*
 RUN apt-get update && apt-get install -y \
     build-essential \
     gcc \

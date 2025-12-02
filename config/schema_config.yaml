@@ -1,43 +1,190 @@
 # Schema Configuration for sys-bio-kgs
+# Using Systems Biology Ontology (SBO) as the head ontology
+# SBO URL: https://raw.githubusercontent.com/EBI-BioModels/SBO/refs/heads/master/SBO_OWL.owl
 
-# Example schema configuration
-# Customize this based on your data source and requirements
+# SBGN Node types mapped to SBO classes
+# Using SBO classes directly where they exist (no is_a if class exists in SBO)
 
-# Node types
-# Example protein node
-protein:  # Class name in lowercase, exists in the ontology
+macromolecule:  # SBO_0000245: macromolecule
   represented_as: node
-  input_label: protein  # Used to identify the node in the input (second element of the node tuple)
-  properties:  # Keys of the property dictionary (third element of the node tuple)
-    name: string
-    description: string
-    organism: string
-    sequence: string
-
-# Example gene node
-gene:  # Class name in lowercase, exists in the ontology
-  represented_as: node
-  input_label: gene
+  input_label: macromolecule
   properties:
     name: string
-    symbol: string
-    description: string
-    chromosome: string
-    start_position: integer
-    end_position: integer
+    label: string
+    sbgn_class: string
+    sbgn_id: string
+    x: float
+    y: float
+    width: float
+    height: float
+    orientation: string
 
-# Edge types
-# Example protein-gene relationship
-protein_encoded_by_gene:  # Edge name in lowercase, does not exist in the ontology
-  is_a: association  # Attached to type that exists in the ontology
+information macromolecule:  # SBO_0000246: information macromolecule (SBGN nucleic acid feature)
+  represented_as: node
+  input_label: information macromolecule
+  properties:
+    name: string
+    label: string
+    sbgn_class: string
+    sbgn_id: string
+    unit_of_information: list
+    x: float
+    y: float
+    width: float
+    height: float
+
+simple chemical:  # SBO_0000247: simple chemical
+  represented_as: node
+  input_label: simple chemical
+  properties:
+    name: string
+    label: string
+    sbgn_class: string
+    sbgn_id: string
+    x: float
+    y: float
+    width: float
+    height: float
+
+process:  # SBO_0000375: process
+  represented_as: node
+  input_label: process
+  properties:
+    sbgn_class: string
+    sbgn_id: string
+    x: float
+    y: float
+    width: float
+    height: float
+    orientation: string
+
+sink reaction:  # SBO_0000632: sink reaction (for SBGN source and sink)
+  is_a: process  # Sink reaction is a type of process
+  represented_as: node
+  input_label: sink reaction
+  properties:
+    sbgn_class: string
+    sbgn_id: string
+    x: float
+    y: float
+    width: float
+    height: float
+
+# Fallback for unknown SBGN entity types
+biological_entity:  # Fallback for other SBGN entity types not explicitly mapped
+  is_a: systems biology representation  # SBO_0000000: systems biology representation
+  represented_as: node
+  input_label: biological_entity
+  properties:
+    name: string
+    label: string
+    sbgn_class: string
+    sbgn_id: string
+    x: float
+    y: float
+    width: float
+    height: float
+
+# SBGN Edge types mapped to SBO classes
+# Note: consumption and production use reactant/product participant roles as relationship types
+
+consumption:  # SBO_0000394: consumption
   represented_as: edge
-  input_label: encoded_by  # Used to identify the edge in the input (fourth element of the edge tuple)
-  source: protein  # Source node type
-  target: gene  # Target node type
-  properties:  # Keys of the property dictionary (fifth element of the edge tuple)
-    confidence: float
-    evidence: string
+  input_label: consumption
+  source: macromolecule  # Can be macromolecule, simple chemical, or information macromolecule
+  target: process
+  properties:
+    sbgn_arc_class: string
+    sbgn_arc_id: string
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    intermediate_points: list
 
-# TODO: Add more node and edge types based on your data source
-# Refer to BioCypher documentation for more examples:
-# https://biocypher.org/BioCypher/learn/tutorials/tutorial002_handling_ontologies/
+production:  # SBO_0000393: production
+  represented_as: edge
+  input_label: production
+  source: process
+  target: macromolecule  # Can be macromolecule, simple chemical, or information macromolecule
+  properties:
+    sbgn_arc_class: string
+    sbgn_arc_id: string
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    intermediate_points: list
+
+inhibition:  # SBO_0000169: inhibition
+  represented_as: edge
+  input_label: inhibition
+  source: macromolecule  # Can be macromolecule, simple chemical, or information macromolecule
+  target: process
+  properties:
+    sbgn_arc_class: string
+    sbgn_arc_id: string
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    intermediate_points: list
+
+necessary stimulation:  # SBO_0000171: necessary stimulation
+  represented_as: edge
+  input_label: necessary_stimulation
+  source: macromolecule  # Can be macromolecule, simple chemical, or information macromolecule
+  target: process
+  properties:
+    sbgn_arc_class: string
+    sbgn_arc_id: string
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    intermediate_points: list
+
+catalysis:  # SBO_0000172: catalysis
+  represented_as: edge
+  input_label: catalysis
+  source: macromolecule  # Can be macromolecule, simple chemical, or information macromolecule
+  target: process
+  properties:
+    sbgn_arc_class: string
+    sbgn_arc_id: string
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    intermediate_points: list
+
+stimulation:  # SBO_0000170: stimulation
+  represented_as: edge
+  input_label: stimulation
+  source: macromolecule  # Can be macromolecule, simple chemical, or information macromolecule
+  target: process
+  properties:
+    sbgn_arc_class: string
+    sbgn_arc_id: string
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    intermediate_points: list
+
+# Note: modulation is not a direct SBO class, but modifier (SBO_0000019) exists as participant role
+# Using modifier as relationship type for modulation
+modifier:  # SBO_0000019: modifier (SBGN modulation arc) - participant role used as relationship
+  is_a: participant role  # SBO_0000003: participant role
+  represented_as: edge
+  input_label: modulation
+  source: macromolecule  # Can be macromolecule, simple chemical, or information macromolecule
+  target: process
+  properties:
+    sbgn_arc_class: string
+    sbgn_arc_id: string
+    start_x: float
+    start_y: float
+    end_x: float
+    end_y: float
+    intermediate_points: list

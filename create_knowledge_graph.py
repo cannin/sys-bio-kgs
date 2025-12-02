@@ -2,14 +2,14 @@
 """
 sys-bio-kgs - A repository for the implementations of the 2025 BioHackathon Germany that do not have another home already
 
-This script creates a knowledge graph using BioCypher and the MyResourceAdapter.
+This script creates a knowledge graph using BioCypher and the SBGNAdapter.
 """
 
 import logging
 from pathlib import Path
 
 from biocypher import BioCypher
-from sys_bio_kgs.adapters.my_resource_adapter import MyResourceAdapter
+from sys_bio_kgs.adapters.sbgn_adapter import SBGNAdapter
 
 # Configure logging
 logging.basicConfig(
@@ -29,11 +29,10 @@ def main():
         schema_config_path="config/schema_config.yaml"
     )
     
-    # Initialize the adapter
-    # TODO: Configure your CSV data source path here
-    data_source = "data/your_data.csv"  # Update this with your actual CSV file path
+    # Initialize the SBGN adapter
+    data_source = "data/Repressilator_PD_v7.sbgn"
     
-    adapter = MyResourceAdapter(
+    adapter = SBGNAdapter(
         data_source=data_source,
         # Add any additional configuration parameters here
     )
@@ -45,7 +44,8 @@ def main():
     
     logger.info("Knowledge graph creation completed successfully!")
 
-    # Create final summary
+    # Create import script and final summary
+    bc.write_import_call()
     bc.summary()
 
 
