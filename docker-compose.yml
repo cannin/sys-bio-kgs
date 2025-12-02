@@ -1,46 +1,47 @@
 services:
-  # BioCypher pipeline service
-  sys_bio_kgs:
-    build: .
-    container_name: sys_bio_kgs-pipeline
-    volumes:
-      - ./data:/app/data:ro
-      - ./logs:/app/logs
-      - ./output:/app/output
-    environment:
-      - NEO4J_URI=bolt://neo4j:7687
-      - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=password
-    depends_on:
-      - neo4j
-    networks:
-      - biocypher-network
 
-  # Neo4j database service
-  neo4j:
-    image: neo4j:5.15-community
-    container_name: sys_bio_kgs-neo4j
-    ports:
-      - "7474:7474"
-      - "7687:7687"
-    environment:
-      - NEO4J_AUTH=neo4j/password
-      - NEO4J_PLUGINS=["apoc"]
-      - NEO4J_dbms_security_procedures_unrestricted=apoc.*
+  build:
+    image: biocypher/base:1.2.0
+    container_name: build
     volumes:
-      - neo4j_data:/data
-      - neo4j_logs:/logs
-      - neo4j_import:/var/lib/neo4j/import
-      - neo4j_plugins:/plugins
-    networks:
-      - biocypher-network
+      - biocypher_neo4j_volume:/usr/app/data
+      - .:/src/
+    command:
+      - /bin/bash
+      - /src/scripts/build.sh
+
+  import:
+    image: neo4j:4.4-enterprise
+    container_name: import
+    environment:
+      NEO4J_AUTH: none
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+      FILL_DB_ON_STARTUP: "yes"
+    volumes:
+      - biocypher_neo4j_volume:/data
+      - ./scripts/import.sh:/scripts/import.sh
+    command:
+      - /bin/bash
+      - /scripts/import.sh
+    depends_on:
+      build:
+        condition: service_completed_successfully
+
+  deploy:
+    image: neo4j:4.4-enterprise
+    container_name: deploy
+    volumes:
+      - biocypher_neo4j_volume:/data
+    environment:
+      NEO4J_dbms_security_auth__enabled: "false"
+      NEO4J_dbms_databases_default__to__read__only: "false"
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    depends_on:
+      import:
+        condition: service_completed_successfully
 
 volumes:
-  neo4j_data:
-  neo4j_logs:
-  neo4j_import:
-  neo4j_plugins:
-
-networks:
-  biocypher-network:
-    driver: bridge
+  biocypher_neo4j_volume:
