@@ -1,0 +1,54 @@
+<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<sbgn xmlns="http://sbgn.org/libsbgn/0.2">
+  <map language="activity flow">
+    <glyph id="nwtN_373486e4-8b5f-4f1c-b149-2ef86ff5c0d8" class="biological activity">
+      <label text="Tetm"/>
+      <bbox x="964.9208294918952" y="343.70779204728126" w="33.8369140625" h="25"/>
+    </glyph>
+    <glyph id="nwtN_5aaf9d6e-a017-400d-be2a-11ecdd8b78f9" class="biological activity">
+      <label text="Tetp"/>
+      <bbox x="966.4435345700202" y="417.25256667139894" w="30.79150390625" h="25"/>
+    </glyph>
+    <glyph id="nwtN_aeb15979-46af-41f9-bee6-9017621af4f9" class="biological activity">
+      <label text="Laclm"/>
+      <bbox x="1056.2301891387258" y="343.70779204728126" w="39.34228515625" h="25"/>
+    </glyph>
+    <glyph id="nwtN_604ada15-23e0-4180-bfd7-e0d807b71b8c" class="biological activity">
+      <label text="Laclp"/>
+      <bbox x="1056.6831889294265" y="268.66755801741124" w="36.296875" h="25"/>
+    </glyph>
+    <glyph id="nwtN_36bd6fde-ccfb-40df-82ec-56984a85fb13" class="biological activity">
+      <label text="Clp"/>
+      <bbox x="1150.5655225565004" y="343.70779204728126" w="30" h="25"/>
+    </glyph>
+    <glyph id="nwtN_4cdac9ea-e826-4468-9644-1713b2313056" class="biological activity">
+      <label text="Clm"/>
+      <bbox x="1150.5655225565004" y="417.25256667139894" w="30" h="25"/>
+    </glyph>
+    <arc id="nwtE_46b068cc-de40-41aa-bc82-c019797db870" class="necessary stimulation" source="nwtN_aeb15979-46af-41f9-bee6-9017621af4f9" target="nwtN_604ada15-23e0-4180-bfd7-e0d807b71b8c">
+      <start x="1075.7088880022632" y="342.70779204728126"/>
+      <end x="1075.0953383531087" y="299.667050075848"/>
+    </arc>
+    <arc id="nwtE_6b2c5607-6677-4738-b621-5307a0d75cb1" class="necessary stimulation" source="nwtN_4cdac9ea-e826-4468-9644-1713b2313056" target="nwtN_36bd6fde-ccfb-40df-82ec-56984a85fb13">
+      <start x="1165.5655225565004" y="416.25256667139894"/>
+      <end x="1165.5655225565004" y="374.70779204728126"/>
+    </arc>
+    <arc id="nwtE_b5217a64-16e5-4558-ae11-b74b5b52439b" class="necessary stimulation" source="nwtN_373486e4-8b5f-4f1c-b149-2ef86ff5c0d8" target="nwtN_5aaf9d6e-a017-400d-be2a-11ecdd8b78f9">
+      <start x="981.8392865231452" y="369.70779204728126"/>
+      <end x="981.8392865231452" y="411.25256667139894"/>
+    </arc>
+    <arc id="nwtE_aaaff41d-5cc6-4d80-bd4b-afde48bd8af6" class="negative influence" source="nwtN_36bd6fde-ccfb-40df-82ec-56984a85fb13" target="nwtN_aeb15979-46af-41f9-bee6-9017621af4f9">
+      <start x="1149.5655225565004" y="356.20779204728126"/>
+      <end x="1097.5724742949758" y="356.20779204728126"/>
+    </arc>
+    <arc id="nwtE_d785679b-7f1d-4822-a587-c123adcd0de2" class="negative influence" source="nwtN_604ada15-23e0-4180-bfd7-e0d807b71b8c" target="nwtN_373486e4-8b5f-4f1c-b149-2ef86ff5c0d8">
+      <start x="1055.6831889294265" y="281.24763247283965"/>
+      <next x="981.8941185673028" y="281.556201755624"/>
+      <end x="981.8499368605645" y="341.70779231703074"/>
+    </arc>
+    <arc id="nwtE_ca6f9df3-5c00-403c-99ee-422ebe0e202c" class="negative influence" source="nwtN_5aaf9d6e-a017-400d-be2a-11ecdd8b78f9" target="nwtN_4cdac9ea-e826-4468-9644-1713b2313056">
+      <start x="998.2350384762702" y="429.75256667139894"/>
+      <end x="1148.5655225565004" y="429.75256667139894"/>
+    </arc>
+  </map>
+</sbgn>
