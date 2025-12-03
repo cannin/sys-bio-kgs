@@ -1,13 +1,13 @@
 # Scripts
 ## SBGN Gilda Annotator
-* sbgn_gilda_annotator.py: Annotate a single or folder of SBGN files using Gilda (https://grounding.indra.bio/)
+* sbgn_gilda_annotator.py: Annotate a single or folder of SBGN files using Gilda (https://grounding.indra.bio/); run in same folder as script
 
 ```
 uv run sbgn_gilda_annotator.py -f sbgn -o sbgn_annotated
 ```
 
 ## SBGN-SBML Matching
-* sbgn_sbml_identifiers_match.py: Pairwise comparison of annotated SBGN and SBML files; returns CSV of overlapping matches; by default assumes folders sbgn_annotated/ and sbml/ for content
+* sbgn_sbml_identifiers_match.py: Pairwise comparison of annotated SBGN and SBML files; returns CSV of overlapping matches; by default assumes folders sbgn_annotated/ and sbml/ for content; run in same folder as script
 
 ```
 uv run python sbgn_sbml_identifiers_match.py
