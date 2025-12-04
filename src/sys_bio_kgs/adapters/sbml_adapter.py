@@ -59,44 +59,26 @@ class SBMLAdapter:
 
         # --- SBML compartments → compartment nodes ---
         for comp in self.model.compartments:
+            props = {}
             node_id = comp.id_
-            props: Dict[str, Any] = {
-                "name": comp.name or ""
-
-
-
-
-
-            }
+            if comp.name is not None:
+                props["name"] = comp.name
             yield (node_id, "compartment", props)
 
         # --- SBML species → entity nodes ---
         for sp in self.model.species:
+            props = {}
             node_id = sp.id_
-            props = {
-                "name": sp.name or ""
-
-
-
-
-
-
-            }
+            if sp.name is not None:
+                props["name"] = sp.name
             yield (node_id, "entity", props)
 
         # --- SBML reactions → process nodes ---
         for rx in self.model.reactions:
+            props = {}
             node_id = rx.id_
-            props = {
-                "name": rx.name or ""
-
-
-
-
-
-
-
-            }
+            if rx.name is not None:
+                props["name"] = rx.name
             yield (node_id, "process", props)
 
     # --------------------------------------------------------------
@@ -116,19 +98,11 @@ class SBMLAdapter:
 
             # Reactants: species → reaction
             for sr in rx.reactants:
+                props = {}
                 species_id = sr.referred_species.id_
                 edge_id = f"{species_id}_reactant_{rx_id}"
-                props: Dict[str, Any] = {
-
-                    "stoichiometry": 1.0 if sr.stoichiometry is None else sr.stoichiometry
-
-
-
-
-
-
-
-                }
+                if sr.stoichiometry is not None:
+                    props["stoichiometry"] = sr.stoichiometry
                 yield (
                     edge_id,
                     species_id,
@@ -139,17 +113,11 @@ class SBMLAdapter:
 
             # Products: reaction → species (aligned with SBGN process → product)
             for sr in rx.products:
+                props = {}
                 species_id = sr.referred_species.id_
                 edge_id = f"{rx_id}_product_{species_id}"
-                props = {
-
-                    "stoichiometry": 1.0 if sr.stoichiometry is None else sr.stoichiometry
-
-
-
-
-
-                }
+                if sr.stoichiometry is not None:
+                    props["stoichiometry"] = sr.stoichiometry
                 yield (
                     edge_id,
                     rx_id,
@@ -162,13 +130,7 @@ class SBMLAdapter:
             for sr in rx.modifiers:
                 species_id = sr.referred_species.id_
                 edge_id = f"{species_id}_modifier_{rx_id}"
-                props = {
-
-
-
-
-
-                }  # can extend with SBO terms or roles later
+                props = {}  # can extend with SBO terms or roles later
                 yield (
                     edge_id,
                     species_id,
@@ -183,14 +145,7 @@ class SBMLAdapter:
                 species_id = sp.id_
                 comp_id = sp.compartment.id_
                 edge_id = f"{species_id}_contained_entity_{comp_id}"
-                props: Dict[str, Any] = {
-
-
-
-
-
-
-                }
+                props: Dict[str, Any] = {}
                 yield (
                     edge_id,
                     species_id,
