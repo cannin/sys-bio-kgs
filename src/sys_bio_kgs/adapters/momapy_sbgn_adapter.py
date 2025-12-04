@@ -8,10 +8,13 @@ using the momapy library to parse and extract nodes and edges for BioCypher.
 import logging
 import hashlib
 from pathlib import Path
-from typing import Iterator, Tuple, Dict, Any, Optional
+from typing import Iterator, Tuple, Dict, Any, Optional, List
 import xml.etree.ElementTree as ET
 import momapy.sbgn.io.sbgnml
 import momapy.io
+import numpy as np
+import random
+
 logger = logging.getLogger(__name__)
 
 
@@ -52,12 +55,17 @@ class MoMaPySBGNAdapter:
         "process": ("process", "SBO_0000375", None),  # SBO_0000375: process
     }
 
-    def __init__(self, data_source: str | Path, add_default_compartments: bool = True, schema_manager = None, **kwargs):
+    def __init__(self, data_source: str | Path, add_default_compartments: bool = True, schema_manager = None, 
+                 generate_embeddings: bool = False, **kwargs):
         """
         Initialize the SBGN adapter.
 
         Args:
             data_source: Path to the SBGN XML file
+            add_default_compartments: Whether to add default compartments
+            schema_manager: Optional schema manager for dynamic schema updates
+            generate_embeddings: Whether to generate embeddings for nodes and edges
+            embedding_model: Name of the sentence-transformers model to use
             **kwargs: Additional configuration parameters
         """
         self.data_source = Path(data_source)
@@ -66,16 +74,25 @@ class MoMaPySBGNAdapter:
             raise FileNotFoundError(f"SBGN file not found: {self.data_source}")
         
         self.config = kwargs
-        self.sbgn_map = self._load_sbgn_map()
+        self.sbgn_map, self.annotations = self._load_sbgn_map()
 
         self.add_default_compartments = add_default_compartments
         self.schema_manager = schema_manager
+        self.generate_embeddings = generate_embeddings
+        
+        
+        hash = random.getrandbits(64)
+        self.hash_str = "%016x" % hash
+        # Initialize embedding model if needed
 
         self.nodes = {}
         self.edges = {}
 
         self.read_nodes()
         self.read_edges()
+        
+        if self.generate_embeddings:
+            self._generate_embeddings()
 
         logger.info(f"Initialized SBGNAdapter with data source: {self.data_source}")
 
@@ -90,7 +107,7 @@ class MoMaPySBGNAdapter:
 
         logger.info("SBGN file loaded successfully")
 
-        return result.obj
+        return result.obj, result.annotations
 
     def _get_glyph_class(self, glyph) -> str:
         """Extract class from a glyph, handling different attribute names."""
@@ -107,12 +124,15 @@ class MoMaPySBGNAdapter:
         node_type, sbo_term, parent_glyph = self.GLYPH_CLASS_TO_NODE_TYPE.get(
             label.lower(), self.GLYPH_CLASS_TO_NODE_TYPE["physical entity"])
         
-        child_type = node_type
+        child_type = node_type        
+        schema_entries = []
         while parent_glyph != None and self.schema_manager:
-            self.schema_manager.add_child(parent_glyph, child_type)
+            schema_entries.insert(0, (parent_glyph, child_type))
             child_type, _, parent_glyph = self.GLYPH_CLASS_TO_NODE_TYPE.get(
                 parent_glyph.lower(), (None, None, None))
             
+        for parent_glyph, child_type in schema_entries:            
+            self.schema_manager.add_child(parent_glyph, child_type)
         return node_type, sbo_term
             
     def extract_edge_schema_labels(self, label):
@@ -126,6 +146,32 @@ class MoMaPySBGNAdapter:
                 parent_glyph.lower(), (None, None, None))
             
         return edge_type, sbo_term
+    
+    def get_annotations(self, model_obj) -> Dict[str, Any]:
+        annotations = self.annotations.get(model_obj, [])
+        annotation_dict = {}
+        for annotation in annotations:
+            _key = str(annotation.qualifier)
+            for resource in annotation.resources:
+                if _key not in annotation_dict:
+                    annotation_dict[_key] = []
+                annotation_dict[_key].append(str(resource))
+            
+        return annotation_dict
+    
+    def get_unit_of_information(self, glyph) -> List[str]:
+        # Extract unit of information if present (for nucleic acid features)
+        additional_info = getattr(glyph, "units_of_information", [])
+        units_of_info = []
+        for info in additional_info:
+            prefix = getattr(info, "prefix", None) 
+            _value =getattr(info, "value", None)
+            if prefix and _value: 
+                units_of_info.append(f"{prefix}:{_value}")
+            elif _value:
+                units_of_info.append(_value)
+
+        return units_of_info
 
     def read_nodes(self):
         """
@@ -139,6 +185,7 @@ class MoMaPySBGNAdapter:
         # Check if we're using the XML fallback (dict structure)
         glyphs = []
         processes = []
+        compartments = []
         if isinstance(self.sbgn_map, dict):
             glyphs = self.sbgn_map.get("glyphs", [])
         else:
@@ -146,8 +193,20 @@ class MoMaPySBGNAdapter:
                 glyphs = self.sbgn_map.entity_pools
             if hasattr(self.sbgn_map, "processes"):
                 processes = self.sbgn_map.processes  
+            if hasattr(self.sbgn_map, "compartments"):
+                compartments = self.sbgn_map.compartments
+        
 
         node_count = 0
+
+        self.nodes["model"] = ("model", "model", {"source": self.data_source, "sbo_term": "SBO_0000231"}, "model")  # SBO_0000411: model
+
+        for compartment in compartments:
+            self.nodes[compartment] = (compartment.id_, "compartment", {"name": compartment.label}, "compartment")
+
+        if self.add_default_compartments:
+            self.nodes["default_compartment"] = ("default_compartment", "compartment", {"name": "default"}, "compartment")
+
         for glyph in glyphs:            
             # momapy object structure
             # Skip nested glyphs (e.g., unit of information inside nucleic acid feature)
@@ -169,10 +228,13 @@ class MoMaPySBGNAdapter:
             label_text = getattr(glyph, "label", "")
 
             # Build properties
-            properties: Dict[str, Any] = {
-                "sbgn_class": glyph_class,
-                "sbgn_id": glyph_id,
-            }
+            properties: Dict[str, Any] = {}
+
+            properties.update(self.get_annotations(glyph_id))
+
+            units_of_info = self.get_unit_of_information(glyph)
+            if units_of_info:  
+                properties["unit_of_information"] = units_of_info
 
             if sbo_term:
                 properties["sbo_term"] = sbo_term
@@ -197,29 +259,17 @@ class MoMaPySBGNAdapter:
             if hasattr(glyph, "orientation"):
                 properties["orientation"] = glyph.orientation
 
-            # Extract unit of information if present (for nucleic acid features)
-            if hasattr(glyph, "glyphs") or hasattr(glyph, "sub_glyphs"):
-                sub_glyphs = getattr(glyph, "glyphs", None) or getattr(
-                    glyph, "sub_glyphs", None
-                )
-                if sub_glyphs:
-                    unit_info = []
-                    for sub_glyph in sub_glyphs:
-                        sub_class = self._get_glyph_class(sub_glyph)
-                        if sub_class == "unit of information":
-                            sub_label = getattr(sub_glyph, "label", "")
-                            if sub_label:
-                                unit_info.append(sub_label)
-                    if unit_info:
-                        properties["unit_of_information"] = unit_info
 
-            self.nodes[glyph] = (glyph_id, node_type, properties)
+
+            self.nodes[glyph] = (glyph_id, node_type, properties, "entity")
             node_count += 1
 
         for process in processes:
             node_type, sbo_term = self.extract_glyph_schema_labels("process")
             if hasattr(process, "id_"):
-                self.nodes[process] = (process.id_, node_type, {"sbo_term": sbo_term, "sbgn_class": "process", "sbgn_id": process.id_})
+                properties = {"sbo_term": sbo_term}
+                properties.update(self.get_annotations(process))
+                self.nodes[process] = (process.id_, node_type, properties, "process")
                 node_count += 1
 
 
@@ -241,10 +291,37 @@ class MoMaPySBGNAdapter:
         # Access arcs from the map (momapy structure)
         modulations = []
         processes = []
+        glyphs = []
         if hasattr(self.sbgn_map, "modulations"):
             modulations = self.sbgn_map.modulations
         if hasattr(self.sbgn_map, "processes"):
             processes = self.sbgn_map.processes
+        if hasattr(self.sbgn_map, "entity_pools"):
+            glyphs = self.sbgn_map.entity_pools
+
+        for k, node in self.nodes.items():
+            if k != "model":
+                self.edges[f"{node[0]}_in_model"] = (f"{node[0]}_in_model", node[0], "model", f"is {node[3]} of", {})
+                edge_count += 1
+
+        for glyph in glyphs:
+            comp = getattr(glyph, "compartment", None)
+            glyph_id = getattr(glyph, "id_", None)
+            if comp:
+                comp_id = getattr(comp, "id_", None)
+                edge_id = f"{glyph_id}_in_compartment_{comp_id}"
+            elif self.add_default_compartments:
+                comp_id = "default_compartment"
+                edge_id = f"{glyph_id}_in_default_compartment"
+            else:
+                continue
+            edge_type, sbo_term = "contained entity", "SBO_0000664"
+            properties: Dict[str, Any] = {}
+            if sbo_term:
+                properties["sbo_term"] = sbo_term
+            properties.update(self.get_annotations(glyph))
+            self.edges[glyph] = (edge_id, glyph_id, comp_id, edge_type, properties)
+            edge_count += 1
 
         for modulation in modulations:
 
@@ -275,6 +352,8 @@ class MoMaPySBGNAdapter:
 
             if sbo_term:
                 properties["sbo_term"] = sbo_term
+
+            properties.update(self.get_annotations(modulation))
 
             # Extract start/end coordinates if available
             if hasattr(modulation, "start"):
@@ -326,9 +405,10 @@ class MoMaPySBGNAdapter:
             glyph_id = getattr(process, "id_", None)
 
             for reactant in getattr(process, "reactants", []):
-                source_id = getattr(reactant, "id_", None)
+                edge_id = getattr(reactant, "id_", None)
                 target_id = glyph_id
-                edge_id = f"{source_id}_reactant_{target_id}"
+                source_glyph = getattr(reactant, "element", None)
+                source_id = getattr(source_glyph, "id_", None) if source_glyph else None
                 if not source_id or not target_id:
                     logger.warning(
                         f"Could not resolve endpoints for reactant in process {edge_id}"
@@ -344,13 +424,16 @@ class MoMaPySBGNAdapter:
                 if sbo_term:
                     properties["sbo_term"] = sbo_term
 
+                properties.update(self.get_annotations(reactant))
+
                 self.edges[reactant] = (edge_id, source_id, target_id, edge_type, properties)
                 edge_count += 1
 
             for product in getattr(process, "products", []):
                 source_id = glyph_id
-                target_id = getattr(product, "id_", None)
-                edge_id = f"{source_id}_product_{target_id}"
+                target_glyph = getattr(product, "element", None)
+                target_id = getattr(target_glyph, "id_", None) if target_glyph else None
+                edge_id = getattr(product, "id_", None)
                 if not source_id or not target_id:
                     logger.warning(
                         f"Could not resolve endpoints for product in process {edge_id}"
@@ -366,6 +449,8 @@ class MoMaPySBGNAdapter:
                 if sbo_term:
                     properties["sbo_term"] = sbo_term
 
+                properties.update(self.get_annotations(product))
+
                 self.edges[product] = (edge_id, source_id, target_id, edge_type, properties)
                 edge_count += 1
 
@@ -374,9 +459,12 @@ class MoMaPySBGNAdapter:
     def get_nodes(self) -> Iterator[Tuple[str, str, Dict[str, Any]]]:
         """Return stored nodes."""
         for node in self.nodes.values():
-            yield node
+            node_id, node_type, properties, _ = node
+            yield (f"{self.hash_str}_{node_id}", node_type, properties)
     
     def get_edges(self) -> Iterator[Tuple[str, str, str, str, Dict[str, Any]]]:
         """Return stored edges."""
         for edge in self.edges.values():
-            yield edge
+            edge_id, source_id, target_id, edge_type, properties = edge
+            yield (f"{self.hash_str}_{edge_id}", f"{self.hash_str}_{source_id}", f"{self.hash_str}_{target_id}", edge_type, properties)
+    
