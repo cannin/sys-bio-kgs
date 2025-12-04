@@ -1,6 +1,8 @@
 import logging
 from pathlib import Path
 from typing import Iterator, Tuple, Dict, Any
+import base64
+from collections import defaultdict
 
 from momapy.sbml.io import sbml
 
@@ -26,7 +28,9 @@ class SBMLAdapter:
     # --------------------------------------------------------------
     # INITIALIZATION
     # --------------------------------------------------------------
-    def __init__(self, data_source: str | Path, **kwargs):
+    def __init__(self, data_source: str | Path,
+        annotations_as_node_properties: bool = True,
+        **kwargs):
         """
         Args:
             data_source: Path to the SBML file
@@ -35,11 +39,14 @@ class SBMLAdapter:
         self.sbml_path = Path(data_source)
         self.config = kwargs
 
+        self.annotations_as_node_properties = annotations_as_node_properties
+
         logger.info(f"Loading SBML model with momapy: {self.sbml_path}")
 
         result = sbml.SBMLReader.read(self.sbml_path)
         self.model = result.obj
         self.annotations = result.annotations
+        self.notes = result.notes
 
         logger.info("SBML model loaded successfully")
 
@@ -57,28 +64,52 @@ class SBMLAdapter:
             entity / process / compartment only have a `name` property.
         """
 
+        # --- SBML model → model node ---
+        yield (self.model.id_, "model", self.get_model_properties())
+
+
         # --- SBML compartments → compartment nodes ---
         for comp in self.model.compartments:
             props = {}
             node_id = comp.id_
+
+            notes_base64 = self._parse_notes(self.notes.get(comp, None))
+            if notes_base64 is not None:
+                props["notes_base64"] = notes_base64
             if comp.name is not None:
                 props["name"] = comp.name
+            if self.annotations_as_node_properties:
+                props.update(self._parse_annotations_to_node_properties(self.annotations.get(comp, None)))
+
             yield (node_id, "compartment", props)
 
         # --- SBML species → entity nodes ---
         for sp in self.model.species:
             props = {}
             node_id = sp.id_
+
+            notes_base64 = self._parse_notes(self.notes.get(sp, None))
+            if notes_base64 is not None:
+                props["notes_base64"] = notes_base64
             if sp.name is not None:
                 props["name"] = sp.name
+            if self.annotations_as_node_properties:
+                props.update(self._parse_annotations_to_node_properties(self.annotations.get(sp, None)))
+
             yield (node_id, "entity", props)
 
         # --- SBML reactions → process nodes ---
         for rx in self.model.reactions:
             props = {}
             node_id = rx.id_
+
+            notes_base64 = self._parse_notes(self.notes.get(rx, None))
+            if notes_base64 is not None:
+                props["notes_base64"] = notes_base64
             if rx.name is not None:
                 props["name"] = rx.name
+            if self.annotations_as_node_properties:
+                props.update(self._parse_annotations_to_node_properties(self.annotations.get(rx, None)))
             yield (node_id, "process", props)
 
     # --------------------------------------------------------------
@@ -153,6 +184,52 @@ class SBMLAdapter:
                     "contained entity",
                     props,
                 )
+
+
+    # --------------------------------------------------------------
+    # Node specific properties
+    # --------------------------------------------------------------
+
+    def get_model_properties(self):
+        model = self.model
+        properties = {
+            "name": model.name,
+            "notes_base64": self._parse_notes(self.notes.get(model, None)),
+        }
+        if self.annotations_as_node_properties:
+            properties.update(self._parse_annotations_to_node_properties(self.annotations.get(model, None)))
+        return properties
+
+    # --------------------------------------------------------------
+    # HELPERS
+    # --------------------------------------------------------------
+
+    @staticmethod
+    def _parse_notes(notes: frozenset) -> str:
+        """Parse notes from SBML elements."""
+        if notes is None:
+            return None
+
+        # encode notes in base64 for compatibility with neo4j CSV import
+        for note in notes:
+            break
+
+        note = base64.b64encode(note, altchars=None).decode()
+        return note
+
+    @staticmethod
+    def _parse_annotations_to_node_properties(annotations: frozenset) -> Dict[str, Any]:
+        """Parse annotations from SBML elements."""
+        if annotations is None:
+            return {}
+
+        parsed_annotations = defaultdict(list)
+        for annotation in annotations:
+            qualifier = annotation.qualifier.value
+            for resource in annotation.resources:
+                parsed_annotations[qualifier].append(resource)
+
+        return parsed_annotations
 
     # --------------------------------------------------------------
     # METADATA
