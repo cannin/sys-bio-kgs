@@ -24,10 +24,9 @@ def _import_momapy():
     global _SBGNMLReader, _ReaderResult, _MOMAPY_AVAILABLE
     if _SBGNMLReader is None:
         try:
-            from momapy.sbgn.io.sbgnml import _SBGNMLReader as Reader
-            from momapy.io import ReaderResult as Result
-            _SBGNMLReader = Reader
-            _ReaderResult = Result
+            import momapy.sbgn.io.sbgnml
+            import momapy.io
+            _SBGNMLReader = momapy.io
             _MOMAPY_AVAILABLE = True
         except ImportError as e:
             logger.warning(
@@ -35,7 +34,7 @@ def _import_momapy():
                 "Falling back to direct XML parsing."
             )
             _MOMAPY_AVAILABLE = False
-    return _SBGNMLReader, _ReaderResult, _MOMAPY_AVAILABLE
+    return  _SBGNMLReader,_MOMAPY_AVAILABLE
 
 
 class SBGNAdapter:
@@ -70,7 +69,7 @@ class SBGNAdapter:
         "equivalence arc": "equivalence",
     }
 
-    def __init__(self, data_source: str | Path, **kwargs):
+    def __init__(self, data_source: str | Path, force_alternative: bool = False, **kwargs):
         """
         Initialize the SBGN adapter.
 
@@ -81,6 +80,7 @@ class SBGNAdapter:
         self.data_source = Path(data_source)
         self.config = kwargs
         self.sbgn_map: Optional[Any] = None
+        self.force_alternative = force_alternative
 
         if not self.data_source.exists():
             raise FileNotFoundError(f"SBGN file not found: {self.data_source}")
@@ -91,11 +91,11 @@ class SBGNAdapter:
         """Load and parse the SBGN file using momapy or fallback XML parser."""
         if self.sbgn_map is None:
             logger.info(f"Loading SBGN file: {self.data_source}")
-            Reader, _, momapy_available = _import_momapy()
+            Reader, momapy_available = _import_momapy()
             
-            if momapy_available:
+            if  momapy_available and not self.force_alternative:
                 # Use momapy if available
-                result = Reader.read(self.data_source)
+                result = Reader.read(self.data_source, return_type="model")
                 if not hasattr(result, "obj") or result.obj is None:
                     raise ValueError(f"Failed to parse SBGN file: {self.data_source}")
                 self.sbgn_map = result.obj
@@ -234,20 +234,15 @@ class SBGNAdapter:
             return getattr(glyph, "class")
         elif hasattr(glyph, "glyph_class"):
             return glyph.glyph_class
-        return "unknown"
+        else:
+            return glyph.__class__.__name__
 
     def _get_arc_class(self, arc) -> str:
         """Extract class from an arc, handling different attribute names."""
         if isinstance(arc, dict):
             return arc.get("class", "unknown")
         else:
-            if hasattr(arc, "class_"):
-                return arc.class_
-            elif hasattr(arc, "class"):
-                return getattr(arc, "class")
-            elif hasattr(arc, "arc_class"):
-                return arc.arc_class
-        return "unknown"
+            return arc.__class__.__name__ if hasattr(arc, "__class__") else "unknown"
 
     def _resolve_arc_endpoints(self, arc) -> Tuple[Optional[str], Optional[str]]:
         """
@@ -269,9 +264,11 @@ class SBGNAdapter:
             target_id = arc.get("target")
         else:
             if hasattr(arc, "source"):
-                source_id = arc.source
+                source_id = getattr(arc.source, "id_", None)
             if hasattr(arc, "target"):
-                target_id = arc.target
+                target_id = getattr(arc.target, "id_", None)
+
+            return source_id, target_id
 
         if not source_id or not target_id:
             return None, None
@@ -352,20 +349,15 @@ class SBGNAdapter:
         sbgn_map = self._load_sbgn_map()
 
         # Check if we're using the XML fallback (dict structure)
+        glyphs = []
+        processes = []
         if isinstance(sbgn_map, dict):
             glyphs = sbgn_map.get("glyphs", [])
         else:
-            # Access glyphs from the map (momapy structure)
-            # momapy structure: sbgn_map.model.glyphs or sbgn_map.glyphs
-            glyphs = []
-            if hasattr(sbgn_map, "model") and hasattr(sbgn_map.model, "glyphs"):
-                glyphs = sbgn_map.model.glyphs
-            elif hasattr(sbgn_map, "glyphs"):
-                glyphs = sbgn_map.glyphs
-            elif hasattr(sbgn_map, "maps") and len(sbgn_map.maps) > 0:
-                # Some SBGN files have maps as a list
-                if hasattr(sbgn_map.maps[0], "glyphs"):
-                    glyphs = sbgn_map.maps[0].glyphs
+            if hasattr(sbgn_map, "entity_pools"):
+                glyphs = sbgn_map.entity_pools
+            if hasattr(sbgn_map, "processes"):
+                processes = sbgn_map.processes  
 
         node_count = 0
         for glyph in glyphs:
@@ -422,10 +414,8 @@ class SBGNAdapter:
                 # Skip nested glyphs (e.g., unit of information inside nucleic acid feature)
                 # Only process top-level glyphs
                 glyph_id = None
-                if hasattr(glyph, "id"):
-                    glyph_id = glyph.id
-                elif hasattr(glyph, "glyph_id"):
-                    glyph_id = glyph.glyph_id
+                if hasattr(glyph, "id_"):
+                    glyph_id = glyph.id_
 
                 if not glyph_id:
                     continue
@@ -435,7 +425,7 @@ class SBGNAdapter:
                 
                 # Map to BioCypher node type
                 node_type = self.GLYPH_CLASS_TO_NODE_TYPE.get(
-                    glyph_class, "biological_entity"
+                    glyph_class.lower(), glyph_class.lower() if glyph_class else "biological_entity"
                 )
 
                 # Extract label
@@ -486,6 +476,12 @@ class SBGNAdapter:
             yield (glyph_id, node_type, properties)
             node_count += 1
 
+        for process in processes:
+            if hasattr(process, "id_"):
+                yield (process.id_, "process", {})
+                node_count += 1
+
+
         logger.info(f"Extracted {node_count} nodes from SBGN file")
 
     def get_edges(self) -> Iterator[Tuple[str, str, str, str, Dict[str, Any]]]:
@@ -500,55 +496,43 @@ class SBGNAdapter:
         sbgn_map = self._load_sbgn_map()
 
         # Check if we're using the XML fallback (dict structure)
-        if isinstance(sbgn_map, dict):
-            arcs = sbgn_map.get("arcs", [])
-        else:
-            # Access arcs from the map (momapy structure)
-            arcs = []
-            if hasattr(sbgn_map, "model") and hasattr(sbgn_map.model, "arcs"):
-                arcs = sbgn_map.model.arcs
-            elif hasattr(sbgn_map, "arcs"):
-                arcs = sbgn_map.arcs
-            elif hasattr(sbgn_map, "maps") and len(sbgn_map.maps) > 0:
-                if hasattr(sbgn_map.maps[0], "arcs"):
-                    arcs = sbgn_map.maps[0].arcs
 
         edge_count = 0
-        for arc in arcs:
-            # Get arc class
-            arc_class = self._get_arc_class(arc)
 
-            # Map to BioCypher edge type
-            edge_type = self.ARC_CLASS_TO_EDGE_TYPE.get(arc_class, "interaction")
+        if isinstance(sbgn_map, dict):
+            arcs = sbgn_map.get("arcs", [])
 
-            # Resolve endpoints
-            source_id, target_id = self._resolve_arc_endpoints(arc)
+            for arc in arcs:
+                # Get arc class
+                arc_class = self._get_arc_class(arc)
 
-            if not source_id or not target_id:
-                arc_id = arc.get("id") if isinstance(arc, dict) else getattr(arc, "id", "unknown")
-                logger.warning(
-                    f"Could not resolve endpoints for arc {arc_id}"
-                )
-                continue
+                # Map to BioCypher edge type
+                edge_type = self.ARC_CLASS_TO_EDGE_TYPE.get(arc_class, "interaction")
 
-            # Get or generate edge ID
-            if isinstance(arc, dict):
-                edge_id = arc.get("id")
-            else:
-                edge_id = getattr(arc, "id", None)
-            
-            # If no arc ID, generate a hash from source, target, and arc class
-            if not edge_id:
-                edge_id_str = f"{source_id}_{target_id}_{arc_class}"
-                edge_id = hashlib.md5(edge_id_str.encode()).hexdigest()[:12]
+                # Resolve endpoints
+                source_id, target_id = self._resolve_arc_endpoints(arc)
 
-            # Build properties
-            properties: Dict[str, Any] = {
-                "sbgn_arc_class": arc_class,
-            }
+                if not source_id or not target_id:
+                    arc_id = arc.get("id") if isinstance(arc, dict) else getattr(arc, "id", "unknown")
+                    logger.warning(
+                        f"Could not resolve endpoints for arc {arc_id}"
+                    )
+                    continue
 
-            # Handle both dict and object structures
-            if isinstance(arc, dict):
+                # Get or generate edge ID
+                if isinstance(arc, dict):
+                    edge_id = arc.get("id")
+
+                # If no arc ID, generate a hash from source, target, and arc class
+                if not edge_id:
+                    edge_id_str = f"{source_id}_{target_id}_{arc_class}"
+                    edge_id = hashlib.md5(edge_id_str.encode()).hexdigest()[:12]
+
+                # Build properties
+                properties: Dict[str, Any] = {
+                    "sbgn_arc_class": arc_class,
+                }
+
                 # XML fallback structure
                 if arc.get("id"):
                     properties["sbgn_arc_id"] = arc["id"]
@@ -570,31 +554,54 @@ class SBGNAdapter:
                     # Convert list of dicts to string representation
                     points_str = "|".join([f"{p.get('x',0)},{p.get('y',0)}" for p in next_points])
                     properties["intermediate_points"] = points_str
-            else:
+                        
+                yield (edge_id, source_id, target_id, edge_type, properties)
+        else:
+            # Access arcs from the map (momapy structure)
+            modulations = []
+            processes = []
+            if hasattr(sbgn_map, "modulations"):
+                modulations = sbgn_map.modulations
+            if hasattr(sbgn_map, "processes"):
+                processes = sbgn_map.processes
+
+            for modulation in modulations:
+
+                edge_id = getattr(modulation, "id_", None)
+
+                arc_class = self._get_arc_class(modulation)
+
+                # Map to BioCypher edge type
+                edge_type = self.ARC_CLASS_TO_EDGE_TYPE.get(arc_class.lower(), arc_class.lower() if arc_class else "interaction")
+
+                # Resolve endpoints
+                source_id, target_id = self._resolve_arc_endpoints(modulation)
+            
+                properties: Dict[str, Any] = {}
                 # momapy object structure
                 # Extract arc ID if available
-                if hasattr(arc, "id"):
-                    properties["sbgn_arc_id"] = arc.id
+                if hasattr(modulation, "id_"):
+                    properties["sbgn_arc_id"] = modulation.id_
 
                 # Extract start/end coordinates if available
-                if hasattr(arc, "start"):
-                    start = arc.start
+                if hasattr(modulation, "start"):
+                    start = modulation.start
                     if hasattr(start, "x") and hasattr(start, "y"):
                         properties["start_x"] = float(start.x) if start.x is not None else None
                         properties["start_y"] = float(start.y) if start.y is not None else None
 
-                if hasattr(arc, "end"):
-                    end = arc.end
+                if hasattr(modulation, "end"):
+                    end = modulation.end
                     if hasattr(end, "x") and hasattr(end, "y"):
                         properties["end_x"] = float(end.x) if end.x is not None else None
                         properties["end_y"] = float(end.y) if end.y is not None else None
 
                 # Extract intermediate points if available
-                if hasattr(arc, "next") or hasattr(arc, "points"):
+                if hasattr(modulation, "next") or hasattr(modulation, "points"):
                     points = []
-                    if hasattr(arc, "next"):
+                    if hasattr(modulation, "next"):
                         # Handle next points
-                        next_point = arc.next
+                        next_point = modulation.next
                         while next_point:
                             if hasattr(next_point, "x") and hasattr(next_point, "y"):
                                 points.append(
@@ -604,8 +611,8 @@ class SBGNAdapter:
                                     }
                                 )
                             next_point = getattr(next_point, "next", None)
-                    elif hasattr(arc, "points"):
-                        for point in arc.points:
+                    elif hasattr(modulation, "points"):
+                        for point in modulation.points:
                             if hasattr(point, "x") and hasattr(point, "y"):
                                 points.append(
                                     {
@@ -618,8 +625,52 @@ class SBGNAdapter:
                         points_str = "|".join([f"{p.get('x',0)},{p.get('y',0)}" for p in points])
                         properties["intermediate_points"] = points_str
 
-            yield (edge_id, source_id, target_id, edge_type, properties)
-            edge_count += 1
+                yield (edge_id, source_id, target_id, edge_type, properties)
+                edge_count += 1
+
+            for process in processes:
+                
+                glyph_id = getattr(process, "id_", None)
+
+                for reactant in getattr(process, "reactants", []):
+                    source_id = getattr(reactant, "id_", None)
+                    target_id = glyph_id
+                    edge_id = f"{source_id}_reactant_{target_id}"
+                    if not source_id or not target_id:
+                        logger.warning(
+                            f"Could not resolve endpoints for reactant in process {edge_id}"
+                        )
+                        continue
+
+                    arc_class = "reactant"
+                    edge_type = self.ARC_CLASS_TO_EDGE_TYPE.get(arc_class, "interaction")
+
+                    properties: Dict[str, Any] = {
+                        "sbgn_arc_class": arc_class,
+                    }
+
+                    yield (edge_id, source_id, target_id, edge_type, properties)
+                    edge_count += 1
+
+                for product in getattr(process, "products", []):
+                    source_id = glyph_id
+                    target_id = getattr(product, "id_", None)
+                    edge_id = f"{source_id}_product_{target_id}"
+                    if not source_id or not target_id:
+                        logger.warning(
+                            f"Could not resolve endpoints for product in process {edge_id}"
+                        )
+                        continue
+
+                    arc_class = "product"
+                    edge_type = self.ARC_CLASS_TO_EDGE_TYPE.get(arc_class, "interaction")
+
+                    properties: Dict[str, Any] = {
+                        "sbgn_arc_class": arc_class,
+                    }
+
+                    yield (edge_id, source_id, target_id, edge_type, properties)
+                    edge_count += 1
 
         logger.info(f"Extracted {edge_count} edges from SBGN file")
 

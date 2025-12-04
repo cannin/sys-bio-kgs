@@ -143,3 +143,8 @@ output/
 data/
 *.db
 *.sqlite
+*.ipynb
+/scripts/sbgn_sbml_matching/sbgn
+/scripts/sbgn_sbml_matching/sbgn_annotated
+/scripts/sbgn_sbml_matching/sbml
+scripts/sbgn_sbml_matching/sbgn_sbml_identifier_overlap.csv
